@@ -1,0 +1,116 @@
+---
+title: "Resampling Methods"
+output: html_notebook
+---
+
+#Validation Set Approach
+Set a random seed so the result could be reproduced precisely at a later time
+
+```{r}
+library(ISLR)
+set.seed(1)
+train=sample(392,196) #produce a vector with length of 196 and consists of random numbers from 1 to 392
+
+```
+
+##Linear Regression
+```{r}
+lm.fit=lm(mpg~horsepower, data=Auto, subset=train) #subset can be a Boolean/numeric vector with length of sample size
+attach(Auto)
+prediction=predict(lm.fit, Auto)
+mean((mpg - prediction)[-train]^2) #mean squared error
+```
+##Polynomial Regression
+```{r}
+#Quadratic Regression
+lm.fit2=lm(mpg~poly(horsepower,2), data=Auto, subset=train) 
+attach(Auto)
+prediction2=predict(lm.fit2, Auto)
+mean((mpg - prediction2)[-train]^2) #mean squared error
+
+#Cubic Regression
+lm.fit3=lm(mpg~poly(horsepower,3), data=Auto, subset=train) 
+attach(Auto)
+prediction3=predict(lm.fit3, Auto)
+mean((mpg - prediction3)[-train]^2) #mean squared error
+```
+ 
+#LOOCV
+Can be automatically computed for any generalized linear model (including linear regression) using the glm() and cv.glm() functions 
+
+```{r}
+library(boot)
+glm.fit=glm(mpg~horsepower, data=Auto)
+cv.err=cv.glm(Auto, glm.fit)
+cv.err$delta ##MSE 
+```
+
+Automate the process for higher power polynomial fits using for() function 
+ex. for (i in 1:5) {process to be repeated}
+
+```{r}
+cv.error=rep(0,5)
+for (i in 1:5){
+  glm.fit=glm(mpg~poly(horsepower, i), data=Auto)
+  cv.error[i]=cv.glm(Auto, glm.fit)$delta[1]
+}
+cv.error
+```
+
+```{r}
+set.seed(17)
+cv.error.10=rep(0,10)
+for (i in 1:10){
+  glm.fit=glm(mpg~poly(horsepower, i), data=Auto)
+  cv.error.10[i]=cv.glm(Auto, glm.fit, K=10)$delta[1]
+}
+cv.error.10
+```
+
+#Bootstrap
+##Estimating accuracy of a statistic of interest
+First, create a function that computes the statistic of interest
+
+```{r}
+library(boot)
+alpha.fn=function(data, index){  #calculate alpha, which is the portion allocated to X so the portfolio has minimum risk 
+  X=data$X[index]
+  Y=data$Y[index]
+  return((var(Y)-cov(X,Y))/var(X)+var(Y)-2*cov(X,Y))
+}
+
+alpha.fn(Portfolio, 1:100) #calculate alpha using all 100 observations in Portfolio
+
+set.seed(1)
+alpha.fn(Portfolio, sample(100, 100, replace=T)) #construct a new bootstrap data set and recalculate alpha
+
+```
+Second, use the boot() function to perform bootstrap  
+boot() constructs several bootstrap data sets, and record all the estimates for alpha and its s.d.
+
+```{r}
+boot(Portfolio, alpha.fn, R=1000) #repeat the process 1000 times
+```
+
+##Estimating accuracy of a model
+Compare the standard error of coefficients between standard error formula and bootstrap estimates 
+Standard error formula relies on certain assumptions: error terms for each observation are uncorrelated with common variance 
+Bootstrap does not rely on any assumption so it is likely to give a more accurate estimate of the standard erros 
+
+```{r}
+boot.fn=function(data, index){
+  lm.fit=lm(mpg~horsepower, data=data, subset=index)
+  return(coef(lm.fit))
+}
+boot(Auto, boot.fn, 1000) #Bootstrap estimates
+
+lm.fit=lm(mpg~horsepower, data=Auto)
+summary(lm.fit)$coef #LSE estimates
+
+```
+
+
+
+
+
+ 

@@ -1,0 +1,71 @@
+---
+title: "Caravan Insurance"
+output: html_notebook
+---
+
+#KNN Classifier
+In KNN classifier, the scale of variables matter so we standardize the data such that all variables have a mean zero and a standard deviation of one
+
+```{r}
+dim(Caravan) #5822 observations with 86 predictors
+attach(Caravan)
+summary(Purchase)
+348/(5474+348) #only 6% of people purchased caravan insurance in this data set
+
+stand.X=scale(Caravan[,-86]) #86th column is the qualitative Purchase variable 
+var(Caravan[,1])
+var(stand.X[,1])
+```
+
+We split the observations into a test set (first 1000 observations) and a training set (remaining observations)
+
+```{r}
+test=1:1000
+training.X=stand.X[-test,]
+test.X=stand.X[test,]
+training.Y=Purchase[-test]
+test.Y=Purchase[test]
+
+set.seed(1)
+knn.pred.1=knn(training.X, test.X, training.Y, 1)
+mean(knn.pred.1 != test.Y)
+```
+
+Perhaps the company is only interested in the fraction of individuals that are correctly predicted to buy insurance
+We can increase K to K=3,5 to see if the model improves 
+```{r}
+table(knn.pred.1, test.Y)
+10/(67+10) #for those who are predicted to buy insurance, 13% actually do purchase insurance
+
+knn.pred.3=knn(training.X, test.X, training.Y, 3)
+table(knn.pred.3, test.Y)
+5/(20+5) #20% accuracy rate
+
+knn.pred.5=knn(training.X, test.X, training.Y, 5)
+table(knn.pred.5, test.Y)
+4/(11+4) #26.7% accuracy rate
+```
+
+#Logistic Regression
+```{r}
+glm.fit=glm(Purchase~., data=Caravan, family=binomial, subset=-test)
+glm.prob=predict(glm.fit, Caravan[test,], type="response")
+
+contrasts(Purchase) #R assigns 1 to Yes and 0 to No
+glm.pred.1=rep("No", 1000)
+glm.pred.1[glm.prob>0.5]="Yes"
+table(glm.pred, test.Y)
+# only 7 people are predicted to buy and the model is wrong about all these
+```
+Try a threshold probability of 20%
+```{r}
+glm.pred.2=rep("No", 1000)
+glm.pred.2[glm.prob>0.25]="Yes"
+table(glm.pred.2, test.Y)
+11/(22+11) #the accuracy rate improves to 33%
+```
+
+
+
+
+

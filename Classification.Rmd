@@ -1,0 +1,181 @@
+---
+title: "Classification"
+output: html_notebook
+---
+
+#Load Data
+Smarket = S&P 500 stock index over 1250 days from 2001 to 2005
+
+```{r}
+library(ISLR)
+names(Smarket)
+dim(Smarket) 
+cor(Smarket) #error because the Direction variable is qualitative
+cor(Smarket[,-9]) #remove the 9th column (Direction) from Smarket data set
+attach(Smarket)
+contrasts(Direction) #to check the dummy variable R has created for Direction (1 for Up and 0 for Down)
+```
+
+#Logistic Regression
+use glm() and include family=binomial in its arguments
+
+```{r}
+glm.log=glm(Direction~.-Today-Year, family=binomial, data=Smarket) 
+# .-Today-Year means all variables in Smarket except Today and Year
+summary(glm.log)
+ 
+glm.prob=predict(glm.log, type='response') #to calculate predicted probability of the form P(Y=1|X)
+glm.prob[1:10] 
+
+glm.pred=rep('Down', 1250) #create a vector of 1250 'Down' elements
+glm.pred[glm.prob>0.5]='Up' #extract the elements in glm.pred which have P(Y=1|X)>0.5 and transform those to 'Up'
+mean(glm.pred == Direction) #this model correctly predicts the movement of the market 52.2% of the time
+mean(glm.pred != Direction) #training error rate
+
+table(glm.pred, Direction) #confusion matrix: predicted value as rows, true values as columns
+(507+145)/1250 #diagonal elements indicate correct predictions
+(457+141)/1250 #off-diagonal elements indicate incorrect predictions
+```
+
+#Validation
+training error rate often underestimates the test error rate
+
+in order to better assess the accuracy of this model, we can split our data to training set and hold out/validation set
+
+```{r}
+training=(Year<2005) #Boolean vector with TRUE and FALSE elements
+Smarket.2005=Smarket[!training,] #! to reverse the elements of training vector and hence extract observations in 2005
+dim(Smarket.2005) #252 observations in 2005
+
+glm.log.training=glm(Direction~.-Today-Year, family=binomial, data=Smarket, subset=training) 
+glm.prob.test=predict(glm.log.training, Smarket.2005, type='response')
+glm.pred.test=rep('Down', 252)
+glm.pred.test[glm.prob.test>0.5]='Up'
+mean(glm.pred.test == Smarket.2005$Direction)
+mean(glm.pred.test != Smarket.2005$Direction) #test error rate
+table(glm.pred.test, Smarket.2005$Direction)
+```
+
+#Variable selection
+removing predictors with high p-values may improve the model
+
+```{r}
+
+summary(glm.log.training) #only Lag 1 and Lag 2 have relatively low p-values
+
+glm.log.training2=glm(Direction~Lag1+Lag2, family=binomial, data=Smarket, subset=training) 
+glm.prob.test2=predict(glm.log.training2, Smarket.2005, type='response')
+glm.pred.test2=rep('Down', 252)
+glm.pred.test2[glm.prob.test2>0.5]='Up'
+mean(glm.pred.test2 == Smarket.2005$Direction)
+mean(glm.pred.test2 != Smarket.2005$Direction) #test error rate
+table(glm.pred.test2, Smarket.2005$Direction)
+
+#strategy of predicting the market will increase everyday (regardless of output of model) also has a 56% accuracy rate 
+(35+106)/252
+#on days when the model predicts the market will incease, it has a 58% accuracy rate
+106/(106+76) 
+```
+
+#Linear Discriminant Analysis
+use lda()
+
+##Interpretation of output
+prior probability give the % of training observations in each class (Up, Down)
+
+group means are the average of each predictor (Lag 1, Lag 2) in each class (Up, Down)
+
+coefficients of linear discriminants provides the linear combinations of Lag 1 and Lag 2 that are used to form the 
+LDA decision rule 
+
+##Interpretation of prediction
+class contains LDA's predictions about movement of the market by comparing the posterior probability of each class and choose the class which gives the larger value
+
+posterior is a (n x k) matrix whose kth column contains the posterior probability that the observation belongs to
+the kth class
+
+x contains the linear discriminant
+
+```{r}
+library(MASS)
+lda.fit=lda(Direction~Lag1+Lag2, data=Smarket, subset=training)
+lda.fit
+
+lda.pred=predict(lda.fit, Smarket.2005)
+names(lda.pred)
+
+lda.class=lda.pred$class
+mean(lda.class == Smarket.2005$Direction)
+table(lda.class, Smarket.2005$Direction) 
+#LDA and logistic regression predictions are almost identical
+#LDA predicts Down for a total of 70 times (35+35)
+#LDA predicts Up for a total of 182 times (76+106)
+
+dim(lda.pred$posterior) # 252 x 2 matrix
+lda.pred$posterior[1:10,] # first column is the posterior probability of Down, second column is the posterior probability of Up
+```
+##Changing the probability threshold 
+LDA with two classes apply a 50% posterior probability threshold by default
+We can change the probability threshold but the test error rate will not be lower than the one by default, since LDA is an approximation of Bayes classifier, which has the lowest total error rate
+From the confusion matrix, we can see that the strategy of predicting the market will increase everyday (regardless of output of model) also has the same accuracy rate as LDA 
+```{r}
+#recreate the predictions of LDA by applying a 50% posterior probability threshold
+lda.pred.test=rep("Up",252)
+lda.pred.test[lda.pred$posterior[,1]>=0.5]="Down"
+summary(lda.pred.test == lda.class) 
+
+#applying a 90% posterior probability threshold
+lda.pred.test2=rep("Up",252)
+lda.pred.test2[lda.pred$posterior[,1]>=0.9]="Down"
+mean(lda.pred.test2 == Smarket.2005$Direction) #same error rate as 50% threshold
+sum(lda.pred.test2=="Up") #no observation has a posterior probability of Down higher than 90% so all the classes are Up
+#this means that applying a 90% posterior probability threshold is equivalent to using the strategy of predicting the market will increase everyday
+```
+
+#Quadratic Discriminant Analysis
+Use qda()
+
+```{r}
+qda.fit=qda(Direction~Lag1+Lag2, data=Smarket, subset=training)
+qda.fit
+
+qda.pred=predict(qda.fit, Smarket.2005)
+qda.class=qda.pred$class
+mean(qda.class == Smarket.2005$Direction) #QDA prediction are accurate 60% of the time
+table(qda.class, Smarket.2005$Direction)
+```
+
+#K-Nearest Neighbours
+previously we used a two-step approach (first fit the model, then use the model to make predictions)
+knn() forms predictions using a single command and requires 4 inputs
+1. a matrix containing training predictors 
+2. a matrix containing test predictors
+3. a vector containing training class
+4. the number of nearest neighbours
+
+if several observations are tied as nearest neighbours, then R will randomly choose between them 
+therefore, a seed must be set if we wish to reproduce the result
+```{r}
+library(class)
+training.X=cbind(Lag1, Lag2)[training,]
+test.X=cbind(Lag1, Lag2)[!training,]
+training.Y=Direction[training]
+test.Y=Direction[!training]
+
+set.seed(1)
+knn.pred=knn(training.X, test.X, training.Y, 1)
+mean(knn.pred == test.Y)
+table(knn.pred, test.Y)
+
+knn.pred2=knn(training.X, test.X, training.Y, 3)
+mean(knn.pred2 == test.Y)
+table(knn.pred2, test.Y) #the result improves slightly when we use K=3 but it's still worse than QDA
+
+```
+
+
+
+
+
+
+
